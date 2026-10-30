@@ -35,12 +35,6 @@ export function fmtClock(ms: number) {
   return h ? `${h}:${mm}:${ss}` : `${mm}:${ss}`
 }
 
-export function fmtRest(sec: number) {
-  if (!sec) return 'Desligado'
-  const m = Math.floor(sec / 60), s = sec % 60
-  return m && s ? `${m}min ${s}s` : m ? `${m}min` : `${s}s`
-}
-
 export function fmtSeconds(sec: number | undefined) {
   if (!sec) return '–'
   const m = Math.floor(sec / 60), s = sec % 60

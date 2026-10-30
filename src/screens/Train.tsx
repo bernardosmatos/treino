@@ -75,7 +75,7 @@ export function RoutineEditor({ id }: { id?: string }) {
         onChange={e => setR({ ...r, name: e.target.value })} autoFocus={!existing} />
       <textarea className="input plain text-2" rows={1} placeholder="Anotações…" value={r.notes ?? ''}
         onChange={e => setR({ ...r, notes: e.target.value })} style={{ margin: '4px 0 12px' }} />
-      <p className="small muted" style={{ marginTop: 0 }}>Preencha as cargas e repetições alvo, se quiser. No treino elas já vêm preenchidas.</p>
+      <p className="small muted" style={{ marginTop: 0 }}>Preencha as cargas e repetições alvo, se quiser. Toque na estrela para definir se a série é válida: as não válidas não contam em volume, séries nem recordes.</p>
       <ExerciseBlocks mode="template" exercises={r.exercises} onChange={exercises => setR({ ...r, exercises })} />
     </div>
   )

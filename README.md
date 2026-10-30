@@ -3,7 +3,8 @@
 App pessoal de registro de treinos (PWA), feito para instalar no iPhone pela tela de início.
 
 - Treinos com séries, carga, repetições, RPE, aquecimento / drop set / falha e supersets
-- Coluna "Anterior" com o que você fez da última vez, timer de descanso
+- Coluna "Anterior" com o que você fez da última vez
+- Marcação de série válida na rotina: as não válidas não contam em volume, séries e recordes
 - Rotinas, biblioteca de ~120 exercícios + exercícios personalizados
 - Recordes (1RM estimado, maior carga, melhor série), gráficos por exercício
 - Peso perguntado ao iniciar cada treino → gráfico de peso corporal e medidas
@@ -50,8 +51,4 @@ Depois de criar sua conta no app, volte em **Authentication → Sign In / Provid
 
 Atualizações aparecem sozinhas na próxima vez que o app for aberto com internet.
 
-### Limitações do iOS para web apps
-
-- O som do fim do descanso só toca com o app aberto (o iOS pausa apps web em segundo plano);
-  o timer continua certo ao voltar.
-- O app instalado tem armazenamento separado do Safari: o login é feito dentro do app.
+O app instalado tem armazenamento separado do Safari: o login é feito dentro do app.

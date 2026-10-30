@@ -29,7 +29,8 @@ export function allExercises(): Exercise[] {
 
 // ---------- séries e volume ----------
 
-export const isWorkingSet = (s: WorkSet) => s.type !== 'warmup' && s.done !== false
+export const isValidSet = (s: WorkSet) => s.type !== 'warmup' && s.valid !== false
+export const isWorkingSet = (s: WorkSet) => isValidSet(s) && s.done !== false
 
 /** 1RM estimado (Epley). */
 export function e1rm(weight: number, reps: number) {

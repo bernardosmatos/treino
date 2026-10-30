@@ -12,7 +12,7 @@ const PATHS: Record<string, string> = {
   x: 'M6 6l12 12M18 6 6 18',
   back: 'M15 5 8 12l7 7',
   more: 'M5 12h.01M12 12h.01M19 12h.01',
-  timer: 'M12 8v5l3 2M9 2h6M12 22a8 8 0 1 0 0-16 8 8 0 0 0 0 16z',
+  star: 'M12 3l2.8 5.8 6.2.9-4.5 4.4 1.1 6.3L12 17.4l-5.6 3 1.1-6.3L3 9.7l6.2-.9z',
   trash: 'M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3',
   trophy: 'M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0zM7 6H4a3 3 0 0 0 3 4M17 6h3a3 3 0 0 1-3 4',
   edit: 'M4 20h4L19 9l-4-4L4 16zM13.5 6.5l4 4',

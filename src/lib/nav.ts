@@ -3,7 +3,7 @@ import type { Routine, Workout, WorkoutExercise } from '../types'
 import { getActive, setActive, uid, put, getItem, list } from './store'
 import { confirmDialog } from '../components/ui'
 import { localDate } from './format'
-import { keepAwake, stopRest } from './timer'
+import { keepAwake } from './wakelock'
 import { getSettings } from './settings'
 
 export type Tab = 'home' | 'train' | 'exercises' | 'progress'
@@ -99,7 +99,6 @@ export function recordBodyweight(weight: number, date = localDate()) {
 
 export function discardActive() {
   setActive(null)
-  stopRest()
   keepAwake(false)
   set({ activeOpen: false })
 }

@@ -37,6 +37,15 @@ describe('cálculos', () => {
     expect(workoutSetCount(w)).toBe(2)
   })
 
+  it('série marcada como não válida não conta em volume, séries e recordes', () => {
+    const w = workout('w1', '2026-10-01', [[100, 5]])
+    w.exercises[0].sets.push({ id: 'nv', type: 'normal', valid: false, weight: 200, reps: 5, done: true })
+    expect(workoutVolume(w)).toBe(500)
+    expect(workoutSetCount(w)).toBe(1)
+    put('workouts', workout('w0', '2026-09-01', [[100, 5]]))
+    expect(workoutPRs(w)).toEqual([])
+  })
+
   it('peso corporal entra no volume de exercício com peso corporal', () => {
     const w: Workout = {
       id: 'p', name: 'p', startedAt: '2026-10-01T10:00:00Z', endedAt: '2026-10-01T11:00:00Z', bodyweight: 80,

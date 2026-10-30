@@ -6,7 +6,7 @@ import { EQUIPMENT_LABEL, KIND_LABEL, MUSCLE_LABEL } from '../data/exercises'
 import { fmtDate } from '../lib/format'
 import { pop, push } from '../lib/nav'
 import {
-  EMPTY_METRICS, METRIC_LABEL, getExercise, mergeMetrics, metricsForKind, sessionMetrics, sessionsFor, type Metrics,
+  EMPTY_METRICS, METRIC_LABEL, getExercise, isValidSet, mergeMetrics, metricsForKind, sessionMetrics, sessionsFor, type Metrics,
 } from '../lib/stats'
 import { remove, useStoreVersion } from '../lib/store'
 import type { Muscle } from '../types'
@@ -93,8 +93,8 @@ export function ExerciseDetail({ id }: { id: string }) {
                 <span className="small muted">{fmtDate(s.workout.startedAt)}</span>
               </div>
               {s.entry.sets.map((set, j) => (
-                <div key={j} className="small num text-2" style={{ padding: '1px 0', color: set.type === 'warmup' ? 'var(--muted)' : undefined }}>
-                  {set.type === 'warmup' ? 'W · ' : ''}{setText(set, ex.kind)}
+                <div key={j} className="small num text-2" style={{ padding: '1px 0', opacity: isValidSet(set) ? 1 : 0.55 }}>
+                  {set.type === 'warmup' ? 'W · ' : isValidSet(set) ? '' : '• '}{setText(set, ex.kind)}
                 </div>
               ))}
             </button>

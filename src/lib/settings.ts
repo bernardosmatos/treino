@@ -1,14 +1,12 @@
 import { useSyncExternalStore } from 'react'
 
 export interface Settings {
-  defaultRest: number
-  sound: boolean
   keepAwake: boolean
   askBodyweight: boolean
 }
 
 const KEY = 'treino-settings'
-const DEFAULTS: Settings = { defaultRest: 90, sound: true, keepAwake: true, askBodyweight: true }
+const DEFAULTS: Settings = { keepAwake: true, askBodyweight: true }
 
 function read(): Settings {
   try { return { ...DEFAULTS, ...JSON.parse(localStorage.getItem(KEY) ?? '{}') } } catch { return DEFAULTS }

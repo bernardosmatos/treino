@@ -114,7 +114,7 @@ export function ExercisePicker({ open, onClose, onPick, multi = true, title = 'A
         <ExerciseList query={query} muscle={muscle} onTap={tap} selected={multi ? new Set(sel) : undefined} />
       </div>
       {multi && sel.length > 0 && (
-        <div className="rest-bar" style={{ padding: 10 }}>
+        <div className="bottom-bar">
           <button className="btn primary block" onClick={() => done(sel)}>
             Adicionar {sel.length} {sel.length === 1 ? 'exercício' : 'exercícios'}
           </button>

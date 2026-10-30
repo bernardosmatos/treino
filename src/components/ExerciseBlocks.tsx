@@ -1,24 +1,21 @@
 import { useMemo, useState, type CSSProperties } from 'react'
-import { fmtNum, fmtRest } from '../lib/format'
+import { fmtNum } from '../lib/format'
 import { push } from '../lib/nav'
-import { getSettings } from '../lib/settings'
-import { getExercise, previousSets } from '../lib/stats'
+import { getExercise, isValidSet, previousSets } from '../lib/stats'
 import { uid } from '../lib/store'
-import { startRest } from '../lib/timer'
 import type { ExerciseKind, SetType, WorkSet, WorkoutExercise } from '../types'
 import { ExercisePicker } from './ExercisePicker'
 import { Icon, NumInput, actionSheet, toast } from './ui'
 
 /**
- * live:     treino em andamento (marca séries, dispara descanso)
+ * live:     treino em andamento (marca séries concluídas)
  * edit:     editando treino já salvo
- * template: montando rotina (sem coluna de concluído/RPE)
+ * template: montando rotina (define quais séries são válidas; sem concluído/RPE)
  */
 export type BlockMode = 'live' | 'edit' | 'template'
 
 const SET_TYPE_SHORT: Record<SetType, string> = { normal: '', warmup: 'W', drop: 'D', failure: 'F' }
 const RPE_OPTIONS = [6, 6.5, 7, 7.5, 8, 8.5, 9, 9.5, 10]
-const REST_OPTIONS = [0, 30, 45, 60, 75, 90, 120, 150, 180, 240, 300]
 const SS_VARS = ['--ss-a', '--ss-b', '--ss-c', '--ss-d']
 
 function prevLabel(s: WorkSet | undefined, kind: ExerciseKind) {
@@ -50,12 +47,11 @@ export function ExerciseBlocks({ exercises, onChange, mode, workoutId }: {
     onChange(exercises.map(e => (e.id === id ? { ...e, ...patch } : e)))
 
   const addExercises = (ids: string[]) => {
-    const def = getSettings().defaultRest
     const added = ids.map(exerciseId => {
       const prev = mode === 'template' ? [] : previousSets(exerciseId, workoutId)
       const count = Math.max(1, Math.min(prev.filter(s => s.type !== 'warmup').length || 3, 8))
       return {
-        id: uid(), exerciseId, restSec: def,
+        id: uid(), exerciseId,
         sets: Array.from({ length: mode === 'template' ? 3 : count }, () => ({ id: uid(), type: 'normal' as SetType, done: mode === 'edit' })),
       }
     })
@@ -112,11 +108,9 @@ export function ExerciseBlocks({ exercises, onChange, mode, workoutId }: {
     <>
       {exercises.map((entry, idx) => {
         const ss = entry.supersetId ? ssIndex.get(entry.supersetId)! : -1
-        const isLastOfSuperset = !entry.supersetId || exercises[idx + 1]?.supersetId !== entry.supersetId
         return (
           <ExerciseCard key={entry.id} entry={entry} mode={mode} workoutId={workoutId}
             superset={ss >= 0 ? { letter: String.fromCharCode(65 + ss), color: `var(${SS_VARS[ss % SS_VARS.length]})` } : undefined}
-            restsAfterSet={isLastOfSuperset}
             onChange={patch => update(entry.id, patch)}
             onMenu={() => openMenu(entry, idx)} />
         )
@@ -129,30 +123,28 @@ export function ExerciseBlocks({ exercises, onChange, mode, workoutId }: {
   )
 }
 
-function ExerciseCard({ entry, mode, workoutId, superset, restsAfterSet, onChange, onMenu }: {
+function ExerciseCard({ entry, mode, workoutId, superset, onChange, onMenu }: {
   entry: WorkoutExercise
   mode: BlockMode
   workoutId?: string
   superset?: { letter: string; color: string }
-  restsAfterSet: boolean
   onChange: (patch: Partial<WorkoutExercise>) => void
   onMenu: () => void
 }) {
   const ex = getExercise(entry.exerciseId)
   const prev = useMemo(() => (mode === 'template' ? [] : previousSets(entry.exerciseId, workoutId)), [entry.exerciseId, workoutId, mode])
   const [showNotes, setShowNotes] = useState(!!entry.notes)
-  const rest = entry.restSec ?? getSettings().defaultRest
   const showRpe = mode !== 'template' && (ex.kind === 'peso_reps' || ex.kind === 'peso_corporal')
   const showDone = mode !== 'template'
 
   const setSets = (sets: WorkSet[]) => onChange({ sets })
   const updSet = (id: string, patch: Partial<WorkSet>) => setSets(entry.sets.map(s => (s.id === id ? { ...s, ...patch } : s)))
 
-  // aquecimento casa com aquecimento e série válida com série válida, na mesma ordem
+  // série válida casa com válida e não válida com não válida, na mesma ordem
   const prevMatch = (i: number) => {
-    const warm = entry.sets[i].type === 'warmup'
-    const k = entry.sets.slice(0, i).filter(x => (x.type === 'warmup') === warm).length
-    return prev.filter(x => (x.type === 'warmup') === warm)[k]
+    const valid = isValidSet(entry.sets[i])
+    const k = entry.sets.slice(0, i).filter(x => isValidSet(x) === valid).length
+    return prev.filter(x => isValidSet(x) === valid)[k]
   }
 
   const toggleDone = (s: WorkSet, i: number) => {
@@ -171,13 +163,13 @@ function ExerciseCard({ entry, mode, workoutId, superset, restsAfterSet, onChang
         : ex.kind === 'tempo' ? !filled.seconds : !filled.km && !filled.seconds
     if (missing) { toast('Preencha a série antes de concluir'); return }
     updSet(s.id, filled)
-    if (mode === 'live' && restsAfterSet) startRest(rest)
   }
 
   const addSet = () => {
     const last = entry.sets[entry.sets.length - 1]
     setSets([...entry.sets, {
       id: uid(), type: last?.type === 'warmup' ? 'normal' : (last?.type ?? 'normal'),
+      valid: last?.type === 'warmup' ? undefined : last?.valid,
       weight: last?.weight, reps: last?.reps, seconds: last?.seconds, km: last?.km, done: mode === 'edit',
     }])
   }
@@ -197,13 +189,6 @@ function ExerciseCard({ entry, mode, workoutId, superset, restsAfterSet, onChang
         <textarea className="input plain small" rows={1} placeholder="Anotação…" value={entry.notes ?? ''}
           onChange={e => onChange({ notes: e.target.value })} style={{ padding: '4px', marginTop: 2 }} />
       )}
-      {mode !== 'edit' && (
-        <button className="rest-chip" onClick={() => actionSheet(REST_OPTIONS.map(sec => ({
-          label: fmtRest(sec) + (sec === rest ? '  ✓' : ''), onSelect: () => onChange({ restSec: sec }),
-        })), 'Tempo de descanso')}>
-          <Icon name="timer" size={16} /> Descanso: {fmtRest(rest)}
-        </button>
-      )}
       <table className="sets">
         <thead>
           <tr>
@@ -211,16 +196,18 @@ function ExerciseCard({ entry, mode, workoutId, superset, restsAfterSet, onChang
             {mode !== 'template' && <th>Anterior</th>}
             {cols.map(c => <th key={c} style={{ width: cols.length === 1 ? 110 : 62 }}>{c}</th>)}
             {showRpe && <th style={{ width: 44 }}>RPE</th>}
+            {mode === 'template' && <th style={{ width: 56 }}>Válida</th>}
             {showDone && <th style={{ width: 40 }}><Icon name="check" size={14} stroke={3} /></th>}
           </tr>
         </thead>
         <tbody>
           {entry.sets.map((s, i) => {
-            if (s.type !== 'warmup') n++
+            const valid = isValidSet(s)
+            if (valid) n++
             const p = prevMatch(i)
-            const label = s.type === 'normal' ? String(n) : SET_TYPE_SHORT[s.type]
+            const label = s.type !== 'normal' ? SET_TYPE_SHORT[s.type] : valid ? String(n) : '•'
             return (
-              <tr key={s.id} className={s.done && showDone ? 'done' : ''}>
+              <tr key={s.id} className={`${s.done && showDone ? 'done' : ''} ${valid ? 'valid' : 'not-valid'}`}>
                 <td>
                   <span style={{ position: 'relative', display: 'inline-block' }}>
                     <span className={`set-type ${s.type}`} style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>{label}</span>
@@ -261,6 +248,14 @@ function ExerciseCard({ entry, mode, workoutId, superset, restsAfterSet, onChang
                       <option value="">–</option>
                       {RPE_OPTIONS.map(r => <option key={r} value={r}>{fmtNum(r)}</option>)}
                     </select>
+                  </td>
+                )}
+                {mode === 'template' && (
+                  <td>
+                    <button className={`valid-btn ${valid ? 'on' : ''}`} role="switch" aria-checked={valid} aria-label="Série válida"
+                      disabled={s.type === 'warmup'} onClick={() => updSet(s.id, { valid: valid ? false : undefined })}>
+                      <Icon name="star" size={18} />
+                    </button>
                   </td>
                 )}
                 {showDone && (

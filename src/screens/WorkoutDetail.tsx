@@ -4,7 +4,7 @@ import { Icon, NumInput, TopBar, actionSheet, confirmDialog, toast } from '../co
 import { fmtDate, fmtDuration, fmtKg, fmtNum, fmtSeconds, fmtTime, fmtVolume, toDateTimeInput } from '../lib/format'
 import { cloneExercises, pop, push, startWorkout } from '../lib/nav'
 import {
-  METRIC_LABEL, bodyweightAt, getExercise, workoutDurationMs, workoutPRs, workoutSetCount, workoutVolume, type PR,
+  METRIC_LABEL, bodyweightAt, getExercise, isValidSet, workoutDurationMs, workoutPRs, workoutSetCount, workoutVolume, type PR,
 } from '../lib/stats'
 import { getItem, put, remove, uid, useStoreVersion } from '../lib/store'
 import type { ExerciseKind, WorkSet, Workout } from '../types'
@@ -95,10 +95,11 @@ export function WorkoutDetail({ id }: { id: string }) {
             </div>
             {e.notes && <div className="small muted" style={{ marginBottom: 4 }}>{e.notes}</div>}
             {e.sets.map(s => {
-              if (s.type !== 'warmup') n++
+              const valid = isValidSet(s)
+              if (valid) n++
               return (
-                <div key={s.id} className="row small num" style={{ padding: '3px 0' }}>
-                  <span style={{ width: 22, fontWeight: 800, color: s.type === 'normal' ? 'var(--muted)' : 'var(--warn)' }}>{s.type === 'normal' ? n : TYPE_TAG[s.type]}</span>
+                <div key={s.id} className="row small num" style={{ padding: '3px 0', opacity: valid ? 1 : 0.55 }}>
+                  <span style={{ width: 22, fontWeight: 800, color: s.type !== 'normal' ? 'var(--warn)' : valid ? 'var(--accent)' : 'var(--muted)' }}>{s.type !== 'normal' ? TYPE_TAG[s.type] : valid ? n : '•'}</span>
                   <span>{setText(s, ex.kind)}</span>
                 </div>
               )

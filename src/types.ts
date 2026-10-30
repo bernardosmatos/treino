@@ -30,6 +30,8 @@ export type SetType = 'normal' | 'warmup' | 'drop' | 'failure'
 export interface WorkSet {
   id: string
   type: SetType
+  /** false = não conta em volume, séries e recordes. Ausente = válida. */
+  valid?: boolean
   weight?: number
   reps?: number
   rpe?: number
@@ -42,7 +44,6 @@ export interface WorkoutExercise {
   id: string
   exerciseId: string
   supersetId?: string
-  restSec?: number
   notes?: string
   sets: WorkSet[]
 }

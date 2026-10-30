@@ -1,12 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
-import { Icon, TopBar, actionSheet, confirmDialog, toast } from '../components/ui'
-import { fmtDate, fmtRest, fmtTime } from '../lib/format'
+import { Icon, TopBar, confirmDialog, toast } from '../components/ui'
+import { fmtDate, fmtTime } from '../lib/format'
 import { pop } from '../lib/nav'
 import { updateSettings, useSettings } from '../lib/settings'
 import { clearLocal, exportBackup, getSyncInfo, importBackup, resyncAll, syncNow, useStoreVersion } from '../lib/store'
 import { supabase } from '../lib/supabase'
-
-const REST_OPTIONS = [30, 45, 60, 75, 90, 120, 150, 180, 240, 300]
 
 function Toggle({ label, hint, on, onChange }: { label: string; hint?: string; on: boolean; onChange: (v: boolean) => void }) {
   return (
@@ -68,13 +66,7 @@ export function Settings() {
 
       <div className="section-title">Treino</div>
       <div className="card" style={{ padding: '0 12px' }}>
-        <button className="list-item" onClick={() => actionSheet(REST_OPTIONS.map(sec => ({
-          label: fmtRest(sec) + (sec === s.defaultRest ? '  ✓' : ''), onSelect: () => updateSettings({ defaultRest: sec }),
-        })), 'Descanso padrão')}>
-          <span className="grow">Descanso padrão</span><span className="muted">{fmtRest(s.defaultRest)}</span>
-        </button>
         <Toggle label="Perguntar peso ao iniciar treino" hint="Alimenta o gráfico de peso corporal" on={s.askBodyweight} onChange={v => updateSettings({ askBodyweight: v })} />
-        <Toggle label="Som ao fim do descanso" hint="Toca com o app aberto" on={s.sound} onChange={v => updateSettings({ sound: v })} />
         <Toggle label="Manter tela ligada no treino" on={s.keepAwake} onChange={v => updateSettings({ keepAwake: v })} />
       </div>
 

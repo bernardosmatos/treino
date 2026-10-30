@@ -261,24 +261,30 @@ tr.done .cell-input { background: transparent; }
   text-align: center; text-align-last: center; -webkit-appearance: none; appearance: none; font-size: 14px; font-weight: 650; padding: 0;
 }
 tr.done .rpe-sel { background: transparent; }
+.sets tr.valid td:first-child { box-shadow: inset 3px 0 0 var(--accent); border-radius: 3px 0 0 3px; }
+.sets tr.valid .set-type.normal { color: var(--accent); }
+.sets tr.not-valid .set-type { color: var(--muted); }
+.sets tr.not-valid td { opacity: .55; }
+.valid-btn {
+  width: 40px; height: 32px; border-radius: 8px; border: 0; background: var(--surface-2);
+  display: inline-flex; align-items: center; justify-content: center; color: var(--muted);
+}
+.valid-btn.on { background: var(--accent-soft); color: var(--accent); }
+.valid-btn.on svg { fill: currentColor; }
+.valid-btn:disabled { opacity: .35; }
 .done-btn {
   width: 36px; height: 32px; border-radius: 8px; border: 0; background: var(--surface-2);
   display: inline-flex; align-items: center; justify-content: center; color: var(--muted);
 }
 .done-btn.on { background: var(--good); color: #fff; }
 
-.rest-chip { display: inline-flex; align-items: center; gap: 4px; color: var(--accent); background: none; border: 0; font-size: 14px; font-weight: 600; padding: 6px 4px; }
-
-.rest-bar {
+.bottom-bar {
   position: fixed; left: 12px; right: 12px; z-index: 40;
   bottom: calc(env(safe-area-inset-bottom) + 12px);
   max-width: 616px; margin: 0 auto;
   background: var(--surface); border: 1px solid var(--line);
-  border-radius: 18px; padding: 10px 12px; box-shadow: 0 8px 30px rgb(0 0 0 / .3);
+  border-radius: 18px; padding: 10px; box-shadow: 0 8px 30px rgb(0 0 0 / .3);
 }
-.rest-bar .track { height: 6px; border-radius: 3px; background: var(--accent-soft); overflow: hidden; margin-bottom: 8px; }
-.rest-bar .fill { height: 100%; background: var(--accent); border-radius: 3px; transition: width .25s linear; }
-.rest-bar .time { font-size: 26px; font-weight: 800; font-variant-numeric: tabular-nums; flex: 1; text-align: center; }
 
 /* ---------- sheet / modal ---------- */
 .backdrop {

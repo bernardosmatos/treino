@@ -5,7 +5,7 @@ import { fmtClock, fmtKg, fmtVolume, fmtNum } from '../lib/format'
 import { closeActive, cloneExercises, discardActive, push, recordBodyweight, setTab } from '../lib/nav'
 import { workoutSetCount, workoutVolume } from '../lib/stats'
 import { getActive, getItem, put, setActive, useStoreVersion } from '../lib/store'
-import { adjustRest, keepAwake, stopRest, useRest } from '../lib/timer'
+import { keepAwake } from '../lib/wakelock'
 import type { Workout } from '../types'
 
 function useNow(ms = 1000) {
@@ -89,27 +89,8 @@ export function ActiveWorkout() {
         <ExerciseBlocks mode="live" workoutId={w.id} exercises={w.exercises} onChange={exercises => update({ exercises })} />
         <button className="btn danger block" style={{ marginTop: 16 }} onClick={discard}>Descartar treino</button>
       </div>
-      <RestBar />
       <BodyweightSheet open={bwOpen} onClose={() => setBwOpen(false)} initial={w.bodyweight}
         onSave={v => { update({ bodyweight: v }); if (v) recordBodyweight(v); setBwOpen(false) }} />
-    </div>
-  )
-}
-
-function RestBar() {
-  const rest = useRest()
-  useNow(250)
-  if (!rest) return null
-  const left = Math.max(0, rest.endsAt - Date.now())
-  return (
-    <div className="rest-bar" role="timer" aria-label="Descanso">
-      <div className="track"><div className="fill" style={{ width: `${Math.min(100, (left / (rest.total * 1000)) * 100)}%` }} /></div>
-      <div className="row">
-        <button className="btn sm" onClick={() => adjustRest(-15)}>−15</button>
-        <div className="time">{fmtClock(left)}</div>
-        <button className="btn sm" onClick={() => adjustRest(15)}>+15</button>
-        <button className="btn sm primary" onClick={stopRest}>Pular</button>
-      </div>
     </div>
   )
 }
