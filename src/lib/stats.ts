@@ -30,7 +30,7 @@ export function allExercises(): Exercise[] {
 // ---------- séries e volume ----------
 
 export const isValidSet = (s: WorkSet) => s.type !== 'warmup' && s.valid !== false
-export const isWorkingSet = (s: WorkSet) => isValidSet(s) && s.done !== false
+export const isDoneSet = (s: WorkSet) => s.done !== false
 
 /** 1RM estimado (Epley). */
 export function e1rm(weight: number, reps: number) {
@@ -39,7 +39,7 @@ export function e1rm(weight: number, reps: number) {
 }
 
 export function setVolume(s: WorkSet, kind: ExerciseKind, bodyweight = 0) {
-  if (!isWorkingSet(s) || !s.reps) return 0
+  if (!isDoneSet(s) || !s.reps) return 0
   if (kind === 'peso_reps') return (s.weight ?? 0) * s.reps
   if (kind === 'peso_corporal') return (bodyweight + (s.weight ?? 0)) * s.reps
   return 0
@@ -81,7 +81,7 @@ export function workoutVolume(w: Workout) {
 }
 
 export function workoutSetCount(w: Workout) {
-  return w.exercises.reduce((t, we) => t + we.sets.filter(isWorkingSet).length, 0)
+  return w.exercises.reduce((t, we) => t + we.sets.filter(isDoneSet).length, 0)
 }
 
 export function workoutDurationMs(w: Workout) {
@@ -103,7 +103,7 @@ export function sessionsFor(exerciseId: string, workouts = finishedWorkouts()): 
     const w = workouts[i]
     const bw = bodyweightAt(w) ?? 0
     w.exercises.forEach(entry => {
-      if (entry.exerciseId === exerciseId && entry.sets.some(isWorkingSet)) out.push({ workout: w, entry, bodyweight: bw })
+      if (entry.exerciseId === exerciseId && entry.sets.some(isDoneSet)) out.push({ workout: w, entry, bodyweight: bw })
     })
   }
   return out
@@ -124,11 +124,12 @@ export const EMPTY_METRICS: Metrics = { maxWeight: 0, best1rm: 0, bestSetVolume:
 export function sessionMetrics(entry: WorkoutExercise, kind: ExerciseKind, bodyweight: number): Metrics {
   const m = { ...EMPTY_METRICS }
   for (const s of entry.sets) {
-    if (!isWorkingSet(s)) continue
-    const w = s.weight ?? 0, r = s.reps ?? 0
-    const load = kind === 'peso_corporal' ? bodyweight + w : w
+    if (!isDoneSet(s)) continue
     const v = setVolume(s, kind, bodyweight)
     m.volume += v
+    if (!isValidSet(s)) continue // aquecimento soma volume, mas não vira recorde
+    const w = s.weight ?? 0, r = s.reps ?? 0
+    const load = kind === 'peso_corporal' ? bodyweight + w : w
     m.bestSetVolume = Math.max(m.bestSetVolume, v)
     m.maxReps = Math.max(m.maxReps, r)
     m.maxSeconds = Math.max(m.maxSeconds, s.seconds ?? 0)
@@ -264,7 +265,7 @@ export function muscleSets(days: number, workouts = finishedWorkouts()): { muscl
     if (Date.parse(w.startedAt) < since) continue
     for (const entry of w.exercises) {
       const ex = getExercise(entry.exerciseId)
-      const n = entry.sets.filter(isWorkingSet).length
+      const n = entry.sets.filter(isDoneSet).length
       if (!n) continue
       acc.set(ex.primary, (acc.get(ex.primary) ?? 0) + n)
       ex.secondary.forEach(m => acc.set(m, (acc.get(m) ?? 0) + n / 2))

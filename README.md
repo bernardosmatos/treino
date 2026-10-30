@@ -4,7 +4,7 @@ App pessoal de registro de treinos (PWA), feito para instalar no iPhone pela tel
 
 - Treinos com séries, carga, repetições, RPE, aquecimento / drop set / falha e supersets
 - Coluna "Anterior" com o que você fez da última vez
-- Marcação de série válida na rotina: as não válidas não contam em volume, séries e recordes
+- Marcação de série válida na rotina (até a falha) ou não válida (aquecimento); todas contam no volume
 - Rotinas, biblioteca de ~120 exercícios + exercícios personalizados
 - Recordes (1RM estimado, maior carga, melhor série), gráficos por exercício
 - Peso perguntado ao iniciar cada treino → gráfico de peso corporal e medidas

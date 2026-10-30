@@ -30,7 +30,7 @@ export type SetType = 'normal' | 'warmup' | 'drop' | 'failure'
 export interface WorkSet {
   id: string
   type: SetType
-  /** false = não conta em volume, séries e recordes. Ausente = válida. */
+  /** false = série de aquecimento/preparação; soma volume, mas não vira recorde. Ausente = válida. */
   valid?: boolean
   weight?: number
   reps?: number

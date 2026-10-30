@@ -72,7 +72,7 @@ export function Progress() {
         {muscles.length
           ? <HBars data={muscles.map(m => ({ label: MUSCLE_LABEL[m.muscle], value: m.sets }))} format={v => fmtNum(v)} />
           : <div className="muted small center-text" style={{ padding: 16 }}>Sem treinos no período.</div>}
-        <div className="small muted" style={{ marginTop: 8 }}>Músculo secundário conta meia série. Séries não válidas não contam.</div>
+        <div className="small muted" style={{ marginTop: 8 }}>Músculo secundário conta meia série.</div>
       </div>
     </div>
   )

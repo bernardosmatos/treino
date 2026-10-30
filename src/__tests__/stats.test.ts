@@ -29,19 +29,19 @@ describe('cálculos', () => {
     expect(e1rm(0, 5)).toBe(0)
   })
 
-  it('volume e séries ignoram aquecimento e séries não concluídas', () => {
+  it('volume e séries contam aquecimento, mas não séries não concluídas', () => {
     const w = workout('w1', '2026-10-01', [[100, 5], [100, 5]])
     w.exercises[0].sets.push({ id: 'wu', type: 'warmup', weight: 60, reps: 10, done: true })
     w.exercises[0].sets.push({ id: 'nd', type: 'normal', weight: 100, reps: 5, done: false })
-    expect(workoutVolume(w)).toBe(1000)
-    expect(workoutSetCount(w)).toBe(2)
+    expect(workoutVolume(w)).toBe(1600)
+    expect(workoutSetCount(w)).toBe(3)
   })
 
-  it('série marcada como não válida não conta em volume, séries e recordes', () => {
+  it('série não válida conta em volume e séries, mas não vira recorde', () => {
     const w = workout('w1', '2026-10-01', [[100, 5]])
     w.exercises[0].sets.push({ id: 'nv', type: 'normal', valid: false, weight: 200, reps: 5, done: true })
-    expect(workoutVolume(w)).toBe(500)
-    expect(workoutSetCount(w)).toBe(1)
+    expect(workoutVolume(w)).toBe(1500)
+    expect(workoutSetCount(w)).toBe(2)
     put('workouts', workout('w0', '2026-09-01', [[100, 5]]))
     expect(workoutPRs(w)).toEqual([])
   })
@@ -86,6 +86,13 @@ describe('recordes e histórico', () => {
     const m = Object.fromEntries(muscleSets(7).map(x => [x.muscle, x.sets]))
     expect(m.peito).toBe(2)
     expect(m.triceps).toBe(1)
+  })
+
+  it('série não válida também conta no volume do músculo', () => {
+    const w = workout('w1', new Date().toISOString().slice(0, 10), [[100, 5]])
+    w.exercises[0].sets.push({ id: 'nv', type: 'normal', valid: false, weight: 50, reps: 10, done: true })
+    put('workouts', w)
+    expect(Object.fromEntries(muscleSets(7).map(x => [x.muscle, x.sets])).peito).toBe(2)
   })
 
   it('semana começa na segunda e sequência conta semanas seguidas', () => {
