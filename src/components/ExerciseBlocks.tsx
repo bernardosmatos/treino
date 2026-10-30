@@ -5,7 +5,7 @@ import { getExercise, isValidSet, previousSets } from '../lib/stats'
 import { uid } from '../lib/store'
 import type { ExerciseKind, SetType, WorkSet, WorkoutExercise } from '../types'
 import { ExercisePicker } from './ExercisePicker'
-import { Icon, NumInput, actionSheet, toast } from './ui'
+import { Icon, NumInput, actionSheet, confirmDialog, toast } from './ui'
 
 /**
  * live:     treino em andamento (marca séries concluídas)
@@ -174,6 +174,13 @@ function ExerciseCard({ entry, mode, workoutId, superset, onChange, onMenu }: {
     }])
   }
 
+  const removeLastSet = async () => {
+    const last = entry.sets[entry.sets.length - 1]
+    if (entry.sets.length <= 1) return
+    if (mode !== 'template' && last.done && !(await confirmDialog('Remover a última série?', { message: 'Ela já foi concluída.', ok: 'Remover', danger: true }))) return
+    setSets(entry.sets.slice(0, -1))
+  }
+
   let n = 0
   const cols = ex.kind === 'peso_reps' ? ['KG', 'REPS'] : ex.kind === 'peso_corporal' ? ['+KG', 'REPS'] : ex.kind === 'tempo' ? ['SEG'] : ['KM', 'MIN']
 
@@ -270,7 +277,10 @@ function ExerciseCard({ entry, mode, workoutId, superset, onChange, onMenu }: {
           })}
         </tbody>
       </table>
-      <button className="btn block sm" style={{ marginTop: 6 }} onClick={addSet}><Icon name="plus" size={16} /> Adicionar série</button>
+      <div className="row" style={{ marginTop: 6, gap: 6 }}>
+        <button className="btn sm" style={{ flex: 1 }} disabled={entry.sets.length <= 1} onClick={removeLastSet}>– Remover série</button>
+        <button className="btn sm" style={{ flex: 1 }} onClick={addSet}><Icon name="plus" size={16} /> Adicionar série</button>
+      </div>
     </div>
   )
 }

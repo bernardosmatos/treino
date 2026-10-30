@@ -75,7 +75,7 @@ export function SearchAndFilter({ query, setQuery, muscle, setMuscle }: {
         <input className="input" style={{ paddingLeft: 38 }} placeholder="Buscar exercício" value={query}
           onChange={e => setQuery(e.target.value)} type="search" />
       </div>
-      <div className="chips">
+      <div className="chips all">
         <button className={`chip ${!muscle ? 'on' : ''}`} onClick={() => setMuscle(null)}>Todos</button>
         {MUSCLES.map(m => (
           <button key={m} className={`chip ${muscle === m ? 'on' : ''}`} onClick={() => setMuscle(muscle === m ? null : m)}>{MUSCLE_LABEL[m]}</button>
@@ -99,7 +99,7 @@ export function ExercisePicker({ open, onClose, onPick, multi = true, title = 'A
   const [creating, setCreating] = useState(false)
   if (!open) return null
 
-  const done = (ids: string[]) => { onPick(ids); setSel([]); setQuery(''); onClose() }
+  const done = (ids: string[]) => { onPick(ids); setSel([]); setQuery(''); setMuscle(null); onClose() }
   const tap = (e: Exercise) => {
     if (!multi) return done([e.id])
     setSel(s => (s.includes(e.id) ? s.filter(x => x !== e.id) : [...s, e.id]))

@@ -187,6 +187,7 @@ select.input {
 
 .chips { display: flex; gap: 6px; overflow-x: auto; padding: 2px 0 6px; scrollbar-width: none; margin: 0 -16px; padding-left: 16px; padding-right: 16px; }
 .chips::-webkit-scrollbar { display: none; }
+.chips.all { flex-wrap: wrap; overflow: visible; margin: 0; padding: 2px 0 6px; }
 .chip {
   flex-shrink: 0; border: 1px solid var(--line); background: var(--surface);
   border-radius: 999px; padding: 6px 12px; font-size: 14px; font-weight: 600; color: var(--text-2);
