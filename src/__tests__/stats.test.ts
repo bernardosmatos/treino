@@ -5,7 +5,7 @@ vi.mock('../lib/supabase', () => ({ supabase: null }))
 
 import { applyRemote, clearLocal, getItem, put } from '../lib/store'
 import {
-  bodyweightAt, e1rm, muscleSets, previousSets, weekStart, weekStreak, workoutPRs, workoutSetCount, workoutVolume,
+  bodyweightAt, e1rm, moveItem, muscleSets, previousSets, repRecords, weekStart, weekStreak, workoutPRs, workoutSetCount, workoutVolume,
 } from '../lib/stats'
 import type { Workout } from '../types'
 
@@ -118,5 +118,21 @@ describe('sincronização', () => {
     expect(getItem('routines', 'r')?.name).toBe('Remota')
     applyRemote({ collection: 'routines', id: 'r', data: null, deleted: true, updated_at: '2999-01-02T00:00:00Z', server_updated_at: '' })
     expect(getItem('routines', 'r')).toBeUndefined()
+  })
+})
+
+describe('reordenar e recordes por repetição', () => {
+  it('move um item para outra posição', () => {
+    expect(moveItem(['a', 'b', 'c', 'd'], 0, 3)).toEqual(['b', 'c', 'd', 'a'])
+    expect(moveItem(['a', 'b', 'c', 'd'], 3, 0)).toEqual(['d', 'a', 'b', 'c'])
+    expect(moveItem(['a', 'b', 'c', 'd'], 1, 2)).toEqual(['a', 'c', 'b', 'd'])
+    expect(moveItem(['a', 'b'], 1, 1)).toEqual(['a', 'b'])
+  })
+
+  it('guarda a maior carga para cada número de repetições', () => {
+    put('workouts', workout('w1', '2026-01-01', [[80, 10], [90, 5], [70, 10]]))
+    put('workouts', workout('w2', '2026-01-08', [[85, 10], [88, 5]]))
+    const recs = repRecords(BENCH)
+    expect(recs.map(r => [r.reps, r.weight, r.workoutId])).toEqual([[5, 90, 'w1'], [10, 85, 'w2']])
   })
 })

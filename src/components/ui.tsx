@@ -31,6 +31,8 @@ const PATHS: Record<string, string> = {
   note: 'M5 4h14v16H5zM9 9h6M9 13h6',
   chevron: 'M9 5l7 7-7 7',
   ruler: 'M3 17 17 3l4 4L7 21zM7 13l2 2M10 10l2 2M13 7l2 2',
+  grip: 'M5 8h14M5 12h14M5 16h14',
+  history: 'M3 12a9 9 0 1 0 3-6.7L3 8M3 3v5h5M12 7v5l3 2',
 }
 
 export function Icon({ name, size = 22, stroke = 2 }: { name: keyof typeof PATHS | string; size?: number; stroke?: number }) {
@@ -104,11 +106,13 @@ export function actionSheet(actions: MenuAction[], title?: string) {
 }
 
 let toastTimer: ReturnType<typeof setTimeout> | undefined
-export function toast(msg: string) {
+let toastAction: { label: string; run: () => void } | null = null
+export function toast(msg: string, action?: { label: string; run: () => void }) {
   toastMsg = msg
+  toastAction = action ?? null
   emit()
   clearTimeout(toastTimer)
-  toastTimer = setTimeout(() => { toastMsg = null; emit() }, 2600)
+  toastTimer = setTimeout(() => { toastMsg = null; toastAction = null; emit() }, action ? 5000 : 2600)
 }
 
 export function UIHost() {
@@ -117,7 +121,16 @@ export function UIHost() {
   const close = () => { dialog = null; emit() }
   return (
     <>
-      {t && <div className="toast" role="status">{t}</div>}
+      {t && (
+        <div className="toast" role="status">
+          {t}
+          {toastAction && (
+            <button className="toast-action" onClick={() => {
+              const a = toastAction; toastMsg = null; toastAction = null; emit(); a?.run()
+            }}>{toastAction.label}</button>
+          )}
+        </div>
+      )}
       {d?.kind === 'confirm' && (
         <Sheet open onClose={() => { d.resolve(false); close() }} title={d.title}>
           {d.message && <p className="text-2" style={{ marginTop: 0 }}>{d.message}</p>}

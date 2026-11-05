@@ -1,8 +1,11 @@
-import { useMemo, useState, type CSSProperties } from 'react'
+import {
+  useEffect, useLayoutEffect, useMemo, useRef, useState,
+  type CSSProperties, type MouseEvent as ReactMouseEvent, type RefObject, type TouchEvent as ReactTouchEvent,
+} from 'react'
 import { fmtNum } from '../lib/format'
-import { push } from '../lib/nav'
-import { getExercise, isValidSet, previousSets } from '../lib/stats'
+import { getExercise, isValidSet, moveItem, previousSets } from '../lib/stats'
 import { uid } from '../lib/store'
+import { ExerciseDetail } from '../screens/Exercises'
 import type { ExerciseKind, SetType, WorkSet, WorkoutExercise } from '../types'
 import { ExercisePicker } from './ExercisePicker'
 import { Icon, NumInput, actionSheet, confirmDialog, toast } from './ui'
@@ -28,6 +31,59 @@ function prevLabel(s: WorkSet | undefined, kind: ExerciseKind) {
   }
 }
 
+// ---------- gestos (toque e mouse) ----------
+
+interface Pt { x: number; y: number }
+interface TrackHandlers {
+  move: (p: Pt, prevent: () => void) => void
+  end: (cancelled: boolean, prevent: () => void) => void
+}
+let lastTouchAt = 0
+
+/**
+ * Acompanha um toque/clique até soltar, com ouvintes na janela. O elemento tocado precisa
+ * continuar montado: no iOS os eventos de toque seguem indo para ele.
+ */
+function track(e: ReactTouchEvent | ReactMouseEvent, h: TrackHandlers): Pt | null {
+  if ('touches' in e) {
+    if (e.touches.length > 1) return null
+    lastTouchAt = Date.now()
+    const t0 = e.touches[0]
+    const id = t0.identifier
+    const find = (ev: TouchEvent) => Array.from(ev.changedTouches).find(t => t.identifier === id)
+    const mv = (ev: TouchEvent) => {
+      const t = find(ev)
+      if (t) h.move({ x: t.clientX, y: t.clientY }, () => { if (ev.cancelable) ev.preventDefault() })
+    }
+    const up = (ev: TouchEvent) => {
+      if (!find(ev)) return
+      off()
+      h.end(ev.type === 'touchcancel', () => { if (ev.cancelable) ev.preventDefault() })
+    }
+    const off = () => {
+      window.removeEventListener('touchmove', mv)
+      window.removeEventListener('touchend', up)
+      window.removeEventListener('touchcancel', up)
+    }
+    window.addEventListener('touchmove', mv, { passive: false })
+    window.addEventListener('touchend', up, { passive: false })
+    window.addEventListener('touchcancel', up)
+    return { x: t0.clientX, y: t0.clientY }
+  }
+  if (e.button !== 0 || Date.now() - lastTouchAt < 800) return null // ignora o mouse simulado depois de um toque
+  const mv = (ev: MouseEvent) => h.move({ x: ev.clientX, y: ev.clientY }, () => ev.preventDefault())
+  const up = () => { off(); h.end(false, () => {}) }
+  const off = () => { window.removeEventListener('mousemove', mv); window.removeEventListener('mouseup', up) }
+  window.addEventListener('mousemove', mv)
+  window.addEventListener('mouseup', up)
+  return { x: e.clientX, y: e.clientY }
+}
+
+const LONG_PRESS_MS = 380
+const REORDER_ROW_H = 64
+
+interface SsInfo { letter: string; color: string }
+
 export function ExerciseBlocks({ exercises, onChange, mode, workoutId }: {
   exercises: WorkoutExercise[]
   onChange: (next: WorkoutExercise[]) => void
@@ -35,6 +91,12 @@ export function ExerciseBlocks({ exercises, onChange, mode, workoutId }: {
   workoutId?: string
 }) {
   const [picker, setPicker] = useState<null | { replace?: string }>(null)
+  const [viewing, setViewing] = useState<string | null>(null)
+  const [reorder, setReorder] = useState<null | { auto: boolean }>(null)
+  const [drag, setDrag] = useState<null | { id: string; y: number }>(null)
+  const listRef = useRef<HTMLDivElement>(null)
+  const latest = useRef(exercises)
+  latest.current = exercises
 
   // letras de superset na ordem em que aparecem
   const ssIndex = useMemo(() => {
@@ -42,6 +104,62 @@ export function ExerciseBlocks({ exercises, onChange, mode, workoutId }: {
     exercises.forEach(e => { if (e.supersetId && !m.has(e.supersetId)) m.set(e.supersetId, m.size) })
     return m
   }, [exercises])
+  const ssInfo = (e: WorkoutExercise): SsInfo | undefined => {
+    const ss = e.supersetId ? ssIndex.get(e.supersetId)! : -1
+    return ss >= 0 ? { letter: String.fromCharCode(65 + ss), color: `var(${SS_VARS[ss % SS_VARS.length]})` } : undefined
+  }
+
+  // ----- reordenar -----
+  const targetIndex = (y: number) => {
+    const top = listRef.current?.getBoundingClientRect().top
+    if (top === undefined) return -1
+    return Math.max(0, Math.min(latest.current.length - 1, Math.round((y - top - REORDER_ROW_H / 2) / REORDER_ROW_H)))
+  }
+  const dragRef = useRef(drag)
+  const setDragBoth = (d: typeof drag) => { dragRef.current = d; setDrag(d) }
+  const reorderRef = useRef(reorder)
+  reorderRef.current = reorder
+
+  const startDrag = (id: string, y: number, auto: boolean) => {
+    navigator.vibrate?.(10)
+    if (!reorderRef.current) setReorder({ auto })
+    setDragBoth({ id, y })
+  }
+  const moveDrag = (y: number) => { if (dragRef.current) setDragBoth({ ...dragRef.current, y }) }
+  const endDrag = (cancelled = false) => {
+    const d = dragRef.current
+    setDragBoth(null)
+    if (!d) return
+    if (!cancelled) {
+      const from = latest.current.findIndex(e => e.id === d.id)
+      const to = targetIndex(d.y)
+      if (from >= 0 && to >= 0 && from !== to) onChange(moveItem(latest.current, from, to))
+    }
+    if (reorderRef.current?.auto) closeReorder(d.id)
+  }
+  const closeReorder = (focusId?: string) => {
+    setReorder(null)
+    if (focusId) setTimeout(() => document.querySelector(`[data-entry="${focusId}"]`)?.scrollIntoView({ block: 'nearest' }), 30)
+  }
+
+  // ----- remover (com desfazer) -----
+  const removeEntry = (id: string) => {
+    const cur = latest.current
+    const idx = cur.findIndex(e => e.id === id)
+    if (idx < 0) return
+    const entry = cur[idx]
+    onChange(cur.filter(e => e.id !== id))
+    toast(`${getExercise(entry.exerciseId).name} removido`, {
+      label: 'Desfazer',
+      run: () => {
+        const now = latest.current
+        if (now.some(e => e.id === id)) return
+        const next = [...now]
+        next.splice(Math.min(idx, next.length), 0, entry)
+        onChange(next)
+      },
+    })
+  }
 
   const update = (id: string, patch: Partial<WorkoutExercise>) =>
     onChange(exercises.map(e => (e.id === id ? { ...e, ...patch } : e)))
@@ -60,14 +178,6 @@ export function ExerciseBlocks({ exercises, onChange, mode, workoutId }: {
 
   const replace = (entryId: string, exerciseId: string) =>
     onChange(exercises.map(e => (e.id === entryId ? { ...e, exerciseId, sets: e.sets.map(s => ({ ...s, done: mode === 'edit' ? s.done : false })) } : e)))
-
-  const move = (idx: number, dir: -1 | 1) => {
-    const j = idx + dir
-    if (j < 0 || j >= exercises.length) return
-    const next = [...exercises]
-    ;[next[idx], next[j]] = [next[j], next[idx]]
-    onChange(next)
-  }
 
   const joinSuperset = (entry: WorkoutExercise, partner: WorkoutExercise) => {
     const group = entry.supersetId ?? partner.supersetId ?? uid()
@@ -89,7 +199,7 @@ export function ExerciseBlocks({ exercises, onChange, mode, workoutId }: {
     }))
   }
 
-  const openMenu = (entry: WorkoutExercise, idx: number) => {
+  const openMenu = (entry: WorkoutExercise) => {
     const others = exercises.filter(e => e.id !== entry.id && (!entry.supersetId || e.supersetId !== entry.supersetId))
     actionSheet([
       { label: 'Substituir exercício', icon: 'swap', onSelect: () => setPicker({ replace: entry.id }) },
@@ -98,39 +208,205 @@ export function ExerciseBlocks({ exercises, onChange, mode, workoutId }: {
         onSelect: () => actionSheet(others.map(o => ({ label: getExercise(o.exerciseId).name, onSelect: () => joinSuperset(entry, o) })), 'Superset com'),
       }] : []),
       ...(entry.supersetId ? [{ label: 'Remover do superset', icon: 'link', onSelect: () => leaveSuperset(entry) }] : []),
-      ...(idx > 0 ? [{ label: 'Mover para cima', icon: 'up', onSelect: () => move(idx, -1) }] : []),
-      ...(idx < exercises.length - 1 ? [{ label: 'Mover para baixo', icon: 'down', onSelect: () => move(idx, 1) }] : []),
-      { label: 'Remover exercício', icon: 'trash', danger: true, onSelect: () => onChange(exercises.filter(e => e.id !== entry.id)) },
+      { label: 'Ver histórico e progresso', icon: 'history', onSelect: () => setViewing(entry.exerciseId) },
+      ...(exercises.length > 1 ? [{ label: 'Reordenar exercícios', icon: 'grip', onSelect: () => setReorder({ auto: false }) }] : []),
+      { label: 'Remover exercício', icon: 'trash', danger: true, onSelect: () => removeEntry(entry.id) },
     ], getExercise(entry.exerciseId).name)
   }
 
   return (
     <>
-      {exercises.map((entry, idx) => {
-        const ss = entry.supersetId ? ssIndex.get(entry.supersetId)! : -1
-        return (
-          <ExerciseCard key={entry.id} entry={entry} mode={mode} workoutId={workoutId}
-            superset={ss >= 0 ? { letter: String.fromCharCode(65 + ss), color: `var(${SS_VARS[ss % SS_VARS.length]})` } : undefined}
-            onChange={patch => update(entry.id, patch)}
-            onMenu={() => openMenu(entry, idx)} />
-        )
-      })}
+      {exercises.length > 1 && (
+        <div className="small muted" style={{ margin: '0 4px 8px' }}>Segure o nome para reordenar · arraste para a esquerda para remover</div>
+      )}
+      {exercises.map(entry => (
+        <ExerciseCard key={entry.id} entry={entry} mode={mode} workoutId={workoutId}
+          superset={ssInfo(entry)}
+          onChange={patch => update(entry.id, patch)}
+          onMenu={() => openMenu(entry)}
+          onOpenDetail={() => setViewing(entry.exerciseId)}
+          onRemove={() => removeEntry(entry.id)}
+          drag={exercises.length > 1 ? {
+            start: y => startDrag(entry.id, y, true), move: moveDrag, end: endDrag,
+          } : undefined} />
+      ))}
       <button className="btn primary block" onClick={() => setPicker({})}><Icon name="plus" /> Adicionar exercício</button>
       <ExercisePicker open={!!picker} multi={!picker?.replace} title={picker?.replace ? 'Substituir exercício' : undefined}
         onClose={() => setPicker(null)}
         onPick={ids => (picker?.replace ? replace(picker.replace, ids[0]) : addExercises(ids))} />
+      {reorder && (
+        <ReorderLayer exercises={exercises} ssInfo={ssInfo} drag={drag} listRef={listRef} targetIndex={targetIndex}
+          onStartDrag={(id, y) => startDrag(id, y, false)} onMoveDrag={moveDrag} onEndDrag={endDrag}
+          showDone={!reorder.auto} onDone={() => closeReorder()} />
+      )}
+      {viewing && (
+        <div className="overlay detail-layer">
+          <ExerciseDetail key={viewing} id={viewing} embedded onBack={() => setViewing(null)} />
+        </div>
+      )}
     </>
   )
 }
 
-function ExerciseCard({ entry, mode, workoutId, superset, onChange, onMenu }: {
+// ---------- lista compacta para reordenar (estilo arrastar e soltar) ----------
+
+function ReorderLayer({ exercises, ssInfo, drag, listRef, targetIndex, onStartDrag, onMoveDrag, onEndDrag, showDone, onDone }: {
+  exercises: WorkoutExercise[]
+  ssInfo: (e: WorkoutExercise) => SsInfo | undefined
+  drag: { id: string; y: number } | null
+  listRef: RefObject<HTMLDivElement>
+  targetIndex: (y: number) => number
+  onStartDrag: (id: string, y: number) => void
+  onMoveDrag: (y: number) => void
+  onEndDrag: (cancelled?: boolean) => void
+  showDone: boolean
+  onDone: () => void
+}) {
+  const rootRef = useRef<HTMLDivElement>(null)
+  const [, rerender] = useState(0)
+  const yRef = useRef<number | null>(null)
+  yRef.current = drag?.y ?? null
+
+  // mede a lista assim que ela aparece (as posições dependem do topo dela)
+  useLayoutEffect(() => { rerender(n => n + 1) }, [])
+
+  // rola sozinho quando o dedo chega perto das bordas
+  useEffect(() => {
+    if (!drag) return
+    let raf = 0
+    const tick = () => {
+      const y = yRef.current, el = rootRef.current
+      if (y !== null && el) {
+        const edge = 80
+        const dy = y < edge ? -Math.ceil((edge - y) / 6) : y > window.innerHeight - edge ? Math.ceil((y - window.innerHeight + edge) / 6) : 0
+        if (dy) { el.scrollTop += dy; rerender(n => n + 1) }
+      }
+      raf = requestAnimationFrame(tick)
+    }
+    raf = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(raf)
+  }, [!!drag])
+
+  const top = listRef.current?.getBoundingClientRect().top
+  const from = drag ? exercises.findIndex(e => e.id === drag.id) : -1
+  const to = drag && top !== undefined ? targetIndex(drag.y) : -1
+  const H = REORDER_ROW_H
+
+  return (
+    <div ref={rootRef} className="reorder-layer" onScroll={() => rerender(n => n + 1)}>
+      <div className="screen">
+        <div className="topbar">
+          <h1>Reordenar</h1>
+          {showDone && <button className="btn primary sm" onClick={onDone}>Concluído</button>}
+        </div>
+        <div className="small muted" style={{ margin: '0 4px 12px' }}>
+          {showDone ? 'Arraste os exercícios para mudar a ordem.' : 'Solte na posição desejada.'}
+        </div>
+        <div ref={listRef} style={{ position: 'relative', height: exercises.length * H }}>
+          {exercises.map((e, j) => {
+            const dragging = drag?.id === e.id
+            let y = j * H
+            if (dragging && top !== undefined) y = Math.max(-H / 2, Math.min((exercises.length - 1) * H + H / 2, drag!.y - top - H / 2))
+            else if (from >= 0 && to >= 0) {
+              if (from < j && j <= to) y -= H
+              else if (to <= j && j < from) y += H
+            }
+            const ss = ssInfo(e)
+            const done = e.sets.filter(s => s.done).length
+            return (
+              <div key={e.id} className={`reorder-row ${dragging ? 'dragging' : ''}`}
+                style={{ transform: `translateY(${y}px)`, ...(ss ? ({ '--ss': ss.color } as CSSProperties) : {}) }}
+                onContextMenu={ev => ev.preventDefault()}
+                onTouchStart={ev => startRowDrag(ev, e.id)} onMouseDown={ev => startRowDrag(ev, e.id)}>
+                {ss && <span className="ss-dot" aria-label={`Superset ${ss.letter}`}>{ss.letter}</span>}
+                <span className="grow">
+                  <span className="ellipsis" style={{ display: 'block', fontWeight: 700 }}>{getExercise(e.exerciseId).name}</span>
+                  <small className="muted">{e.sets.length} {e.sets.length === 1 ? 'série' : 'séries'}{done ? ` · ${done} feitas` : ''}</small>
+                </span>
+                <Icon name="grip" />
+              </div>
+            )
+          })}
+        </div>
+      </div>
+    </div>
+  )
+
+  function startRowDrag(ev: ReactTouchEvent | ReactMouseEvent, id: string) {
+    const p = track(ev, {
+      move: (pt, prevent) => { prevent(); onMoveDrag(pt.y) },
+      end: (cancelled, prevent) => { prevent(); onEndDrag(cancelled) },
+    })
+    if (p) onStartDrag(id, p.y)
+  }
+}
+
+// ---------- card do exercício ----------
+
+function ExerciseCard({ entry, mode, workoutId, superset, onChange, onMenu, onOpenDetail, onRemove, drag }: {
   entry: WorkoutExercise
   mode: BlockMode
   workoutId?: string
-  superset?: { letter: string; color: string }
+  superset?: SsInfo
   onChange: (patch: Partial<WorkoutExercise>) => void
   onMenu: () => void
+  onOpenDetail: () => void
+  onRemove: () => void
+  drag?: { start: (y: number) => void; move: (y: number) => void; end: (cancelled?: boolean) => void }
 }) {
+  const wrapRef = useRef<HTMLDivElement>(null)
+  const [dx, setDx] = useState(0)
+  const [swiping, setSwiping] = useState(false)
+  const suppressClick = useRef(false)
+  const swipeArmed = dx < -(wrapRef.current?.offsetWidth ?? 320) * 0.4
+
+  const onGestureStart = (e: ReactTouchEvent | ReactMouseEvent) => {
+    const target = e.target as HTMLElement
+    if (target.closest('textarea') || target === document.activeElement) return
+    if (!('touches' in e) && target.closest('input, select, button:not(.name)')) return
+    suppressClick.current = false
+    const inHeader = !!target.closest('.ex-title')
+    let phase: 'pending' | 'swipe' | 'drag' | 'none' = 'pending'
+    let curDx = 0, start: Pt = { x: 0, y: 0 }, lastY = 0
+    const timer = inHeader && drag ? setTimeout(() => {
+      if (phase !== 'pending') return
+      phase = 'drag'
+      suppressClick.current = true
+      drag.start(lastY)
+    }, LONG_PRESS_MS) : undefined
+
+    const p = track(e, {
+      move: (pt, prevent) => {
+        lastY = pt.y
+        const ddx = pt.x - start.x, ddy = pt.y - start.y
+        if (phase === 'pending') {
+          if (ddx < -10 && Math.abs(ddx) > Math.abs(ddy) * 1.3) { phase = 'swipe'; clearTimeout(timer); setSwiping(true) }
+          else if (Math.hypot(ddx, ddy) > 10) { phase = 'none'; clearTimeout(timer) }
+        }
+        if (phase === 'swipe') { prevent(); curDx = Math.min(0, ddx); setDx(curDx) }
+        else if (phase === 'drag') { prevent(); drag?.move(pt.y) }
+      },
+      end: (cancelled, prevent) => {
+        clearTimeout(timer)
+        if (phase === 'swipe') {
+          prevent()
+          suppressClick.current = true
+          setSwiping(false)
+          const w = wrapRef.current?.offsetWidth ?? 320
+          if (!cancelled && curDx < -w * 0.4) {
+            setDx(-w * 1.1)
+            setTimeout(onRemove, 180)
+          } else setDx(0)
+        } else if (phase === 'drag') {
+          prevent()
+          drag?.end(cancelled)
+        }
+      },
+    })
+    if (!p) { clearTimeout(timer); return }
+    start = p
+    lastY = p.y
+  }
   const ex = getExercise(entry.exerciseId)
   const prev = useMemo(() => (mode === 'template' ? [] : previousSets(entry.exerciseId, workoutId)), [entry.exerciseId, workoutId, mode])
   const [showNotes, setShowNotes] = useState(!!entry.notes)
@@ -185,9 +461,20 @@ function ExerciseCard({ entry, mode, workoutId, superset, onChange, onMenu }: {
   const cols = ex.kind === 'peso_reps' ? ['KG', 'REPS'] : ex.kind === 'peso_corporal' ? ['+KG', 'REPS'] : ex.kind === 'tempo' ? ['SEG'] : ['KM', 'MIN']
 
   return (
-    <div className={`ex-card ${superset ? 'ss' : ''}`} style={superset ? ({ '--ss': superset.color } as CSSProperties) : undefined}>
-      <div className="ex-title">
-        <button className="name ellipsis" onClick={() => push({ name: 'exercise', id: ex.id })}>{ex.name}</button>
+    <div ref={wrapRef} className="ex-wrap" data-entry={entry.id}
+      onTouchStart={onGestureStart} onMouseDown={onGestureStart}
+      onClickCapture={e => { if (suppressClick.current) { e.stopPropagation(); e.preventDefault(); suppressClick.current = false } }}>
+      <div className={`ex-swipe-bg ${swipeArmed ? 'armed' : ''}`} style={{ opacity: dx < 0 ? 1 : 0 }} aria-hidden="true">
+        <Icon name="trash" /> Remover
+      </div>
+    <div className={`ex-card ${superset ? 'ss' : ''}`}
+      style={{
+        ...(superset ? ({ '--ss': superset.color } as CSSProperties) : {}),
+        transform: dx ? `translateX(${dx}px)` : undefined,
+        transition: swiping ? 'none' : 'transform .18s ease-out',
+      }}>
+      <div className="ex-title" onContextMenu={e => e.preventDefault()}>
+        <button className="name ellipsis" onClick={onOpenDetail}>{ex.name}</button>
         <button className="icon-btn" aria-label="Anotação" onClick={() => setShowNotes(v => !v)}><Icon name="note" size={20} /></button>
         <button className="icon-btn" aria-label="Opções" onClick={onMenu}><Icon name="more" /></button>
       </div>
@@ -281,6 +568,7 @@ function ExerciseCard({ entry, mode, workoutId, superset, onChange, onMenu }: {
         <button className="btn sm" style={{ flex: 1 }} disabled={entry.sets.length <= 1} onClick={removeLastSet}>– Remover série</button>
         <button className="btn sm" style={{ flex: 1 }} onClick={addSet}><Icon name="plus" size={16} /> Adicionar série</button>
       </div>
+    </div>
     </div>
   )
 }

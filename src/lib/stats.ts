@@ -208,6 +208,29 @@ export function workoutPRs(w: Workout): PR[] {
   return prs
 }
 
+export interface RepRecord { reps: number; weight: number; date: string; workoutId: string }
+
+/** Maior carga já levantada para cada número de repetições (só séries válidas). */
+export function repRecords(exerciseId: string, maxReps = 15): RepRecord[] {
+  const best = new Map<number, RepRecord>()
+  for (const s of sessionsFor(exerciseId)) {
+    for (const set of s.entry.sets) {
+      if (!isDoneSet(set) || !isValidSet(set) || !set.reps || !set.weight || set.reps > maxReps) continue
+      const cur = best.get(set.reps)
+      if (!cur || set.weight > cur.weight) best.set(set.reps, { reps: set.reps, weight: set.weight, date: s.workout.startedAt, workoutId: s.workout.id })
+    }
+  }
+  return [...best.values()].sort((a, b) => a.reps - b.reps)
+}
+
+/** Move o item da posição `from` para `to`, empurrando os demais. */
+export function moveItem<T>(arr: T[], from: number, to: number): T[] {
+  const next = [...arr]
+  const [item] = next.splice(from, 1)
+  next.splice(Math.max(0, Math.min(to, next.length)), 0, item)
+  return next
+}
+
 /** Séries da última vez que o exercício foi feito (para mostrar na coluna "Anterior"). */
 export function previousSets(exerciseId: string, excludeWorkoutId?: string): WorkSet[] {
   for (const w of finishedWorkouts()) {
