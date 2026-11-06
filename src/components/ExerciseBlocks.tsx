@@ -142,6 +142,23 @@ export function ExerciseBlocks({ exercises, onChange, mode, workoutId }: {
     if (focusId) setTimeout(() => document.querySelector(`[data-entry="${focusId}"]`)?.scrollIntoView({ block: 'nearest' }), 30)
   }
 
+  const removeSet = (entryId: string, setId: string) => {
+    const entry = latest.current.find(e => e.id === entryId)
+    const idx = entry?.sets.findIndex(s => s.id === setId) ?? -1
+    if (!entry || idx < 0 || entry.sets.length <= 1) return
+    const removed = entry.sets[idx]
+    onChange(latest.current.map(e => (e.id === entryId ? { ...e, sets: e.sets.filter(s => s.id !== setId) } : e)))
+    toast('Série removida', {
+      label: 'Desfazer',
+      run: () => onChange(latest.current.map(e => {
+        if (e.id !== entryId || e.sets.some(s => s.id === setId)) return e
+        const sets = [...e.sets]
+        sets.splice(Math.min(idx, sets.length), 0, removed)
+        return { ...e, sets }
+      })),
+    })
+  }
+
   // ----- remover (com desfazer) -----
   const removeEntry = (id: string) => {
     const cur = latest.current
@@ -216,8 +233,10 @@ export function ExerciseBlocks({ exercises, onChange, mode, workoutId }: {
 
   return (
     <>
-      {exercises.length > 1 && (
-        <div className="small muted" style={{ margin: '0 4px 8px' }}>Segure o nome para reordenar · arraste para a esquerda para remover</div>
+      {exercises.length > 0 && (
+        <div className="small muted" style={{ margin: '0 4px 8px' }}>
+          {exercises.length > 1 ? 'Segure o nome para reordenar · ' : ''}deslize o nome para remover o exercício, ou uma série para remover só ela
+        </div>
       )}
       {exercises.map(entry => (
         <ExerciseCard key={entry.id} entry={entry} mode={mode} workoutId={workoutId}
@@ -226,6 +245,7 @@ export function ExerciseBlocks({ exercises, onChange, mode, workoutId }: {
           onMenu={() => openMenu(entry)}
           onOpenDetail={() => setViewing(entry.exerciseId)}
           onRemove={() => removeEntry(entry.id)}
+          onRemoveSet={setId => removeSet(entry.id, setId)}
           drag={exercises.length > 1 ? {
             start: y => startDrag(entry.id, y, true), move: moveDrag, end: endDrag,
           } : undefined} />
@@ -343,7 +363,7 @@ function ReorderLayer({ exercises, ssInfo, drag, listRef, targetIndex, onStartDr
 
 // ---------- card do exercício ----------
 
-function ExerciseCard({ entry, mode, workoutId, superset, onChange, onMenu, onOpenDetail, onRemove, drag }: {
+function ExerciseCard({ entry, mode, workoutId, superset, onChange, onMenu, onOpenDetail, onRemove, onRemoveSet, drag }: {
   entry: WorkoutExercise
   mode: BlockMode
   workoutId?: string
@@ -352,13 +372,20 @@ function ExerciseCard({ entry, mode, workoutId, superset, onChange, onMenu, onOp
   onMenu: () => void
   onOpenDetail: () => void
   onRemove: () => void
+  onRemoveSet: (setId: string) => void
   drag?: { start: (y: number) => void; move: (y: number) => void; end: (cancelled?: boolean) => void }
 }) {
   const wrapRef = useRef<HTMLDivElement>(null)
+  const cardRef = useRef<HTMLDivElement>(null)
+  // deslize do exercício inteiro (pela faixa do nome, para qualquer lado)
   const [dx, setDx] = useState(0)
   const [swiping, setSwiping] = useState(false)
+  // deslize de uma série (pela linha, para a esquerda)
+  const [setSwipe, setSetSwipe] = useState<null | { id: string; dx: number; top: number; height: number; live: boolean }>(null)
   const suppressClick = useRef(false)
-  const swipeArmed = dx < -(wrapRef.current?.offsetWidth ?? 320) * 0.4
+  const width = wrapRef.current?.offsetWidth ?? 320
+  const swipeArmed = Math.abs(dx) > width * 0.4
+  const setArmed = !!setSwipe && setSwipe.dx < -width * 0.4
 
   const onGestureStart = (e: ReactTouchEvent | ReactMouseEvent) => {
     const target = e.target as HTMLElement
@@ -366,6 +393,9 @@ function ExerciseCard({ entry, mode, workoutId, superset, onChange, onMenu, onOp
     if (!('touches' in e) && target.closest('input, select, button:not(.name)')) return
     suppressClick.current = false
     const inHeader = !!target.closest('.ex-title')
+    const row = target.closest<HTMLElement>('tr[data-set]')
+    if (!inHeader && !row) return // resto do card (botões, anotação) não desliza
+    const setId = row?.dataset.set
     let phase: 'pending' | 'swipe' | 'drag' | 'none' = 'pending'
     let curDx = 0, start: Pt = { x: 0, y: 0 }, lastY = 0
     const timer = inHeader && drag ? setTimeout(() => {
@@ -375,28 +405,48 @@ function ExerciseCard({ entry, mode, workoutId, superset, onChange, onMenu, onOp
       drag.start(lastY)
     }, LONG_PRESS_MS) : undefined
 
+    const rowBox = () => {
+      const r = row!.getBoundingClientRect(), c = cardRef.current!.getBoundingClientRect()
+      return { top: r.top - c.top, height: r.height }
+    }
+
     const p = track(e, {
       move: (pt, prevent) => {
         lastY = pt.y
         const ddx = pt.x - start.x, ddy = pt.y - start.y
         if (phase === 'pending') {
-          if (ddx < -10 && Math.abs(ddx) > Math.abs(ddy) * 1.3) { phase = 'swipe'; clearTimeout(timer); setSwiping(true) }
-          else if (Math.hypot(ddx, ddy) > 10) { phase = 'none'; clearTimeout(timer) }
+          const horizontal = Math.abs(ddx) > 10 && Math.abs(ddx) > Math.abs(ddy) * 1.3
+          if (horizontal && (inHeader || ddx < 0)) {
+            phase = 'swipe'; clearTimeout(timer)
+            if (inHeader) setSwiping(true)
+            else setSetSwipe({ id: setId!, dx: 0, ...rowBox(), live: true })
+          } else if (Math.hypot(ddx, ddy) > 10) { phase = 'none'; clearTimeout(timer) }
         }
-        if (phase === 'swipe') { prevent(); curDx = Math.min(0, ddx); setDx(curDx) }
-        else if (phase === 'drag') { prevent(); drag?.move(pt.y) }
+        if (phase === 'swipe') {
+          prevent()
+          if (inHeader) { curDx = ddx; setDx(curDx) }
+          else { curDx = Math.min(0, ddx); setSetSwipe(s => (s ? { ...s, dx: curDx } : s)) }
+        } else if (phase === 'drag') { prevent(); drag?.move(pt.y) }
       },
       end: (cancelled, prevent) => {
         clearTimeout(timer)
         if (phase === 'swipe') {
           prevent()
           suppressClick.current = true
-          setSwiping(false)
           const w = wrapRef.current?.offsetWidth ?? 320
-          if (!cancelled && curDx < -w * 0.4) {
-            setDx(-w * 1.1)
-            setTimeout(onRemove, 180)
-          } else setDx(0)
+          const past = !cancelled && Math.abs(curDx) > w * 0.4
+          if (inHeader) {
+            setSwiping(false)
+            if (past) { setDx(Math.sign(curDx) * w * 1.1); setTimeout(onRemove, 180) }
+            else setDx(0)
+          } else if (past && entry.sets.length > 1) {
+            setSetSwipe(s => (s ? { ...s, dx: -w * 1.1, live: false } : s))
+            setTimeout(() => { setSetSwipe(null); onRemoveSet(setId!) }, 160)
+          } else {
+            if (past) toast('Para remover o exercício, deslize o nome dele')
+            setSetSwipe(s => (s ? { ...s, dx: 0, live: false } : s))
+            setTimeout(() => setSetSwipe(null), 180)
+          }
         } else if (phase === 'drag') {
           prevent()
           drag?.end(cancelled)
@@ -464,10 +514,10 @@ function ExerciseCard({ entry, mode, workoutId, superset, onChange, onMenu, onOp
     <div ref={wrapRef} className="ex-wrap" data-entry={entry.id}
       onTouchStart={onGestureStart} onMouseDown={onGestureStart}
       onClickCapture={e => { if (suppressClick.current) { e.stopPropagation(); e.preventDefault(); suppressClick.current = false } }}>
-      <div className={`ex-swipe-bg ${swipeArmed ? 'armed' : ''}`} style={{ opacity: dx < 0 ? 1 : 0 }} aria-hidden="true">
-        <Icon name="trash" /> Remover
+      <div className={`ex-swipe-bg ${swipeArmed ? 'armed' : ''} ${dx > 0 ? 'left' : ''}`} style={{ opacity: dx ? 1 : 0 }} aria-hidden="true">
+        <Icon name="trash" /> Remover exercício
       </div>
-    <div className={`ex-card ${superset ? 'ss' : ''}`}
+    <div ref={cardRef} className={`ex-card ${superset ? 'ss' : ''}`}
       style={{
         ...(superset ? ({ '--ss': superset.color } as CSSProperties) : {}),
         transform: dx ? `translateX(${dx}px)` : undefined,
@@ -482,6 +532,11 @@ function ExerciseCard({ entry, mode, workoutId, superset, onChange, onMenu, onOp
       {showNotes && (
         <textarea className="input plain small" rows={1} placeholder="Anotação…" value={entry.notes ?? ''}
           onChange={e => onChange({ notes: e.target.value })} style={{ padding: '4px', marginTop: 2 }} />
+      )}
+      {setSwipe && (
+        <div className={`set-swipe-bg ${setArmed ? 'armed' : ''}`} style={{ top: setSwipe.top, height: setSwipe.height }} aria-hidden="true">
+          <Icon name="trash" size={18} /> Remover série
+        </div>
       )}
       <table className="sets">
         <thead>
@@ -501,7 +556,9 @@ function ExerciseCard({ entry, mode, workoutId, superset, onChange, onMenu, onOp
             const p = prevMatch(i)
             const label = s.type !== 'normal' ? SET_TYPE_SHORT[s.type] : valid ? String(n) : '•'
             return (
-              <tr key={s.id} className={`${s.done && showDone ? 'done' : ''} ${valid ? 'valid' : 'not-valid'}`}>
+              <tr key={s.id} data-set={s.id}
+                className={`${s.done && showDone ? 'done' : ''} ${valid ? 'valid' : 'not-valid'} ${setSwipe?.id === s.id ? 'swiping' : ''}`}
+                style={setSwipe?.id === s.id ? ({ '--dx': `${setSwipe.dx}px`, '--sw-t': setSwipe.live ? 'none' : 'transform .16s ease-out' } as CSSProperties) : undefined}>
                 <td>
                   <span style={{ position: 'relative', display: 'inline-block' }}>
                     <span className={`set-type ${s.type}`} style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>{label}</span>

@@ -239,6 +239,15 @@ select.input {
   transition: background .15s;
 }
 .ex-swipe-bg.armed { background: var(--danger); }
+.ex-swipe-bg.left { justify-content: flex-start; padding: 0 0 0 22px; }
+.set-swipe-bg {
+  position: absolute; left: 10px; right: 10px; z-index: 0; border-radius: 10px;
+  display: flex; align-items: center; justify-content: flex-end; gap: 6px; padding-right: 14px;
+  background: color-mix(in srgb, var(--danger) 70%, var(--surface)); color: #fff; font-weight: 700; font-size: 14px;
+}
+.set-swipe-bg.armed { background: var(--danger); }
+.sets { position: relative; z-index: 1; }
+.sets tr[data-set] { touch-action: pan-y; }
 .ex-card { background: var(--surface); border-radius: var(--radius); padding: 12px 10px 8px; position: relative; }
 .ex-title .name { -webkit-touch-callout: none; }
 
@@ -312,6 +321,8 @@ tr.done .rpe-sel { background: transparent; }
 .sets tr.valid .set-type.normal { color: var(--accent); }
 .sets tr.not-valid .set-type { color: var(--muted); }
 .sets tr.not-valid td { opacity: .55; }
+.sets tr.swiping td { transform: translateX(var(--dx)); transition: var(--sw-t); background: var(--surface); opacity: 1; }
+.sets tr.swiping.done td { background: var(--done-row); }
 .valid-btn {
   width: 40px; height: 32px; border-radius: 8px; border: 0; background: var(--surface-2);
   display: inline-flex; align-items: center; justify-content: center; color: var(--muted);
